@@ -5,7 +5,7 @@ version = '0.0.1'
 
 setup(name='poliglo',
       version=version,
-      description="",
+      description="Python client for poliglo (https://github.com/dperezrada/poliglo)",
       long_description="""\
 """,
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
