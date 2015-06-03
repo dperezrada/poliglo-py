@@ -21,14 +21,9 @@ def select_dict_el(data, key_expr, default=None):
         curr_el = curr_el[key]
     return curr_el
 
-def make_request(url, simulate_browser=None):
+def make_request(url):
     escaped_url = urllib2.quote(url, safe="%/:=&?~#+!$,;'@()*[]")
-    if simulate_browser:
-        opener = urllib2.build_opener()
-        opener.addheaders = [('User-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/534.30 (KHTML, like Gecko) Chrome/12.0.742.112 Safari/534.30')]
-        req = opener.open(escaped_url)
-    else:
-        req = urllib2.urlopen(escaped_url)
+    req = urllib2.urlopen(escaped_url)
     body = req.read()
     headers = req.headers.dict
     status = req.code
@@ -49,10 +44,21 @@ def json_loads(raw_data, encoding='utf-8'):
 # Based on http://stackoverflow.com/questions/1254454/fastest-way-to-convert-a-dicts-keys-values-from-unicode-to-str
 def convert_object_to_unicode(data, encoding='utf-8'):
     if isinstance(data, basestring):
-        return data.decode(encoding, encoding="ignore")
+        return data.decode(encoding, errors="ignore")
     elif isinstance(data, collections.Mapping):
         return dict(map(convert_to_unicode, data.iteritems()))
     elif isinstance(data, collections.Iterable):
         return type(data)(map(convert_to_unicode, data))
     else:
         return data
+
+
+def to_unicode(text, convert_numbers=True, encoding='utf-8'):
+    if isinstance(text, unicode):
+        return text
+    elif isinstance(text, (int, long, float, complex)):
+        if convert_numbers:
+            return str(text).decode(encoding)
+        else:
+            return text
+    return unicode(text, encoding)

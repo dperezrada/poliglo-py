@@ -3,7 +3,6 @@ from unittest import TestCase
 from mock import patch, Mock
 
 from poliglo.utils import set_dict_el, select_dict_el, make_request
-from poliglo.testing_utils import mock_request
 
 class TestUtilsSelectAndSetDict(TestCase):
     def setUp(self):
@@ -35,9 +34,11 @@ class TestUtilsSelectAndSetDict(TestCase):
 class TestUtilsMakeRequest(TestCase):
     @patch('poliglo.utils.urllib2.urlopen')
     def test_request(self, mock_urlopen):
-        mock_request(mock_urlopen, default_content='<html>hola</html>', default_status=200, default_headers={'Content-Type': 'text/html'})
-        code, headers, body = make_request('http://example.com')
+        mocked_open = Mock()
+        mocked_open.read.side_effect = ['<html>hola</html>',]
+        mocked_open.code = 200
+        mocked_open.close.side_effect = [None,]
+        mock_urlopen.side_effect = [mocked_open,]
+        code, _, body = make_request('http://example.com')
         self.assertEqual(200, code)
-        self.assertEqual({'Content-Type': 'text/html'}, headers)
         self.assertEqual('<html>hola</html>', body)
-
