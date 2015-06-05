@@ -5,7 +5,7 @@ from mock import Mock, call, patch
 import poliglo
 from poliglo.utils import to_json, json_loads, select_dict_el
 
-MASTERMIND_TEST_URL = 'http://mastermind_url_test'
+POLIGLO_SERVER_TEST_URL = 'http://poliglo_server_url_test'
 
 def mock_request(mock_urlopen, specific_content=None, default_content=None, default_headers=None, default_status=200):
     if not specific_content:
@@ -84,7 +84,7 @@ class TestPreparations(TestCase):
     @patch('poliglo.utils.urllib2.urlopen')
     def test_get_config(self, mock_urlopen):
         mock_request(mock_urlopen, default_content=to_json(self.config))
-        body = poliglo.get_config(MASTERMIND_TEST_URL, 'filter_worker')
+        body = poliglo.get_config(POLIGLO_SERVER_TEST_URL, 'filter_worker')
         self.assertEqual(self.config, body)
 
     def test_get_worker_script_data(self):
@@ -118,7 +118,7 @@ class TestPreparations(TestCase):
         worker_type = 'worker_type_1'
         mocked_urls = {}
 
-        url = poliglo.MASTER_MIND_URL_WORKER_SCRIPTS % (MASTERMIND_TEST_URL, worker_type)
+        url = poliglo.POLIGLO_SERVER_URL_WORKER_SCRIPTS % (POLIGLO_SERVER_TEST_URL, worker_type)
 
         mocked_urls[url] = {
             'body': to_json({
@@ -128,7 +128,7 @@ class TestPreparations(TestCase):
         }
 
         mock_request(mock_urlopen, mocked_urls)
-        worker_scripts, connection = poliglo.prepare_worker(MASTERMIND_TEST_URL, worker_type)
+        worker_scripts, connection = poliglo.prepare_worker(POLIGLO_SERVER_TEST_URL, worker_type)
 
         expected_worker_scripts = json_loads(mocked_urls[url]['body'])
         self.assertEqual(expected_worker_scripts, worker_scripts)
@@ -153,16 +153,20 @@ class TestWriteOutputs(TestCase):
 
         self.worker_id = 'worker_1'
 
-    def test_set_workers_output(self):
+    @patch('poliglo.add_data_to_next_worker')
+    def test_set_workers_output(self, mock_add_data_to_next_worker):
         poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
-        self.assertEqual(self.process_data, self.data['workers_output']['worker_1'])
+        data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
+        self.assertEqual(self.process_data, data_for_next_worker['workers_output']['worker_1'])
 
-    def test_set_process_variables(self):
+    @patch('poliglo.add_data_to_next_worker')
+    def test_set_process_variables(self, mock_add_data_to_next_worker):
         poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
-        self.assertEqual(self.worker_id, self.data['process']['last_worker'])
+        data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
+        self.assertEqual([self.worker_id, ], data_for_next_worker['process']['workers'])
         self.assertEqual(
             self.worker_script_data['outputs'][0],
-            self.data['process']['worker_id']
+            data_for_next_worker['process']['worker_id']
         )
 
     # TODO: Move this test to default_main_inside
@@ -170,9 +174,12 @@ class TestWriteOutputs(TestCase):
     #     poliglo.write_outputs(self.data, self.process_data, self.worker_scripts, self.connection, self.worker_type)
     #     self.connection.sadd.assert_any_call('scripts:example_process:processes:123:jobs_ids:done', '5')
 
-    def test_add_new_pending_job(self):
+
+    @patch('poliglo.add_data_to_next_worker')
+    def test_add_new_pending_job(self, mock_add_data_to_next_worker):
         poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
-        self.assertEqual(2, len(self.data['jobs_ids']))
+        data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
+        self.assertEqual(2, len(data_for_next_worker['jobs_ids']))
 
 class TestStartProcess(TestCase):
     def setUp(self):

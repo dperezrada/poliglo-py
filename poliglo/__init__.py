@@ -19,8 +19,8 @@ REDIS_KEY_INSTANCE_WORKER_JOBS = "scripts:%s:processes:%s:workers:%s:jobs_ids:%s
 REDIS_KEY_INSTANCE_WORKER_ERRORS = "scripts:%s:processes:%s:workers:%s:errors"
 REDIS_KEY_INSTANCE_WORKER_DISCARDED = "scripts:%s:processes:%s:workers:%s:discarded"
 
-MASTER_MIND_URL_WORKER_CONFIG = "%s/worker_types/%s/config"
-MASTER_MIND_URL_WORKER_SCRIPTS = "%s/worker_types/%s/scripts"
+POLIGLO_SERVER_URL_WORKER_CONFIG = "%s/worker_types/%s/config"
+POLIGLO_SERVER_URL_WORKER_SCRIPTS = "%s/worker_types/%s/scripts"
 
 # Start Preparation methods
 def get_connection(worker_config, target='redis'):
@@ -32,7 +32,7 @@ def get_connection(worker_config, target='redis'):
         )
 
 def get_config(master_mind_url, worker_type):
-    _, _, content = make_request(MASTER_MIND_URL_WORKER_CONFIG % (master_mind_url, worker_type))
+    _, _, content = make_request(POLIGLO_SERVER_URL_WORKER_CONFIG % (master_mind_url, worker_type))
     worker_config = json_loads(content)
     return worker_config
 
@@ -45,7 +45,7 @@ def get_worker_script_data(worker_scripts, data, worker_id):
     return deepcopy(worker_script_data)
 
 def prepare_worker(master_mind_url, worker_type):
-    _, _, content = make_request(MASTER_MIND_URL_WORKER_SCRIPTS % (master_mind_url, worker_type))
+    _, _, content = make_request(POLIGLO_SERVER_URL_WORKER_SCRIPTS % (master_mind_url, worker_type))
     worker_scripts = json_loads(content)
     worker_config = get_config(master_mind_url, worker_type)
 
@@ -118,12 +118,15 @@ def write_one_output(connection, output_worker_type, output_worker_id, data):
     add_data_to_next_worker(connection, output_worker_type, to_json(data))
 
 def prepare_write_output(data, process_data, worker_id):
-    data['process']['last_worker'] = worker_id
-    if not data.get('workers_output'):
-        data['workers_output'] = {}
-    data['workers_output'][worker_id] = process_data
-    data['inputs'] = process_data
-    return data
+    new_data = deepcopy(data)
+    if not new_data['process'].get('workers'):
+        new_data['process']['workers'] = []
+    new_data['process']['workers'].append(worker_id)
+    if not new_data.get('workers_output'):
+        new_data['workers_output'] = {}
+    new_data['workers_output'][worker_id] = process_data
+    new_data['inputs'] = process_data
+    return new_data
 
 def write_outputs(connection, data, process_data, worker_script_data):
     data = prepare_write_output(data, process_data, data['process']['worker_id'])
@@ -180,7 +183,7 @@ def start_process(connection, process_type, start_worker_type, start_worker_id, 
         'workers_output': {
             'initial': data
         },
-        'last_worker': ''
+        'workers': []
     }
 
     if not exists_process_before:
