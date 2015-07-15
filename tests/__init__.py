@@ -34,7 +34,7 @@ class TestInputs(TestCase):
                     "template_file": "workers_output.assign_variable.template_file"
                 }
             },
-            "outputs": ["worker1"]
+            "next_workers": ["worker1"]
         }
         self.data = {
             'workers_output': {
@@ -146,8 +146,8 @@ class TestWriteOutputs(TestCase):
         }
         self.process_data = {'message': 'hello'}
         self.worker_script_data = {
-            '__outputs_types': ['write'],
-            'outputs': ['worker_2']
+            '__next_workers_types': ['write'],
+            'next_workers': ['worker_2']
         }
         self.connection = Mock()
 
@@ -165,7 +165,7 @@ class TestWriteOutputs(TestCase):
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
         self.assertEqual([self.worker_id, ], data_for_next_worker['process']['workers'])
         self.assertEqual(
-            self.worker_script_data['outputs'][0],
+            self.worker_script_data['next_workers'][0],
             data_for_next_worker['process']['worker_id']
         )
 
@@ -252,8 +252,8 @@ class TestDefaultMainInside(TestCase):
         self.worker_scripts = {
             'example_process': {
                 'worker_1': {
-                    '__outputs_types': ['worker'],
-                    'outputs': ['worker_2']
+                    '__next_workers_types': ['worker'],
+                    'next_workers': ['worker_2']
                 }
             }
         }
@@ -275,13 +275,13 @@ class TestDefaultMainInside(TestCase):
     def test_with_process_change_output(self, write_outputs_mock):
         def my_func(_, data):
             return [
-                {'value': data['process']['id'], '__outputs': ['worker_3']},
+                {'value': data['process']['id'], '__next_workers': ['worker_3']},
             ]
         poliglo.pre_default_main_inside(
             self.connection, self.worker_scripts, self.worker_type, my_func
         )
         worker_script_data = write_outputs_mock.call_args[0][3]
-        self.assertEqual(['worker_3',], worker_script_data['outputs'])
+        self.assertEqual(['worker_3',], worker_script_data['next_workers'])
 
     @patch('poliglo.write_outputs')
     def test_with_no_process_data(self, write_outputs_mock):

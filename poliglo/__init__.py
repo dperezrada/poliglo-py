@@ -132,8 +132,8 @@ def write_outputs(connection, data, process_data, worker_script_data):
     data = prepare_write_output(data, process_data, data['process']['worker_id'])
     update_process(connection, data['process']['type'], data['process']['id'])
     pipe = connection.pipeline()
-    workers_outputs_types = worker_script_data.get('__outputs_types', [])
-    for i, output_worker_id in enumerate(worker_script_data.get('outputs', [])):
+    workers_outputs_types = worker_script_data.get('__next_workers_types', [])
+    for i, output_worker_id in enumerate(worker_script_data.get('next_workers', [])):
         write_one_output(connection, workers_outputs_types[i], output_worker_id, data)
     pipe.execute()
 
@@ -233,9 +233,9 @@ def default_main_inside(connection, worker_scripts, queue_message, process_func,
                 nodata = False
                 if not process_data:
                     process_data = {}
-                if process_data.get('__outputs'):
-                    worker_script_data['outputs'] = process_data.get('__outputs', [])
-                if len(worker_script_data.get('outputs', [])) == 0:
+                if process_data.get('__next_workers'):
+                    worker_script_data['next_workers'] = process_data.get('__next_workers', [])
+                if len(worker_script_data.get('next_workers', [])) == 0:
                     write_finalized_job(data, process_data, worker_id, connection)
                     continue
                 write_outputs(connection, data, process_data, worker_script_data)
@@ -264,10 +264,12 @@ def pre_default_main_inside(
 def default_main(master_mind_url, worker_type, process_func, *args, **kwargs):
     worker_scripts, connection = prepare_worker(master_mind_url, worker_type)
     if os.environ.get('TRY_INPUT'):
+        import pprint
         script_id = os.environ.get('SCRIPT_ID')
         raw_data = open(os.environ.get('TRY_INPUT')).read()
         data = get_job_data(raw_data)
-        print list(process_func(worker_scripts.get(script_id), data, *args, **kwargs))
+        worker_script_data = get_worker_script_data(worker_scripts, data, data['process']['worker_id'])
+        pprint.pprint(list(process_func(worker_script_data, data, *args, **kwargs)))
         return None
     print ' [*] Waiting for data. To exit press CTRL+C'
     while True:
