@@ -27,7 +27,7 @@ def mock_request(mock_urlopen, specific_content=None, default_content=None, defa
 
 class TestInputs(TestCase):
     def setUp(self):
-        self.worker_script_data = {
+        self.worker_workflow_data = {
             "before": {
                 "select_inputs": {
                     "email": "workers_output.get_emails_to_send.email",
@@ -47,13 +47,13 @@ class TestInputs(TestCase):
             }
         }
     def test_before_select_inputs(self):
-        result = poliglo.get_inputs(self.data, self.worker_script_data)
+        result = poliglo.get_inputs(self.data, self.worker_workflow_data)
         expected = {'email': 'test@test.com', 'template_file': '/tmp/testfile.handlebars'}
         self.assertEqual(expected, result)
 
     def test_before_select_inputs_not_overwrite_input(self):
         self.data['inputs'] = {'email': 'test_master@test.com'}
-        result = poliglo.get_inputs(self.data, self.worker_script_data)
+        result = poliglo.get_inputs(self.data, self.worker_workflow_data)
         expected = {'email': 'test_master@test.com', 'template_file': '/tmp/testfile.handlebars'}
         self.assertEqual(expected, result)
 
@@ -87,10 +87,10 @@ class TestPreparations(TestCase):
         body = poliglo.get_config(POLIGLO_SERVER_TEST_URL, 'filter_worker')
         self.assertEqual(self.config, body)
 
-    def test_get_worker_script_data(self):
-        data = {'process': {'type': 'script1'}}
-        worker_scripts = {
-            'script1': {
+    def test_get_worker_workflow_data(self):
+        data = {'workflow_instance': {'workflow': 'workflow1'}}
+        worker_workflows = {
+            'workflow1': {
                 'filter_worker_1': {
                     'default_inputs':{
                         "name": "Juan"
@@ -101,51 +101,51 @@ class TestPreparations(TestCase):
                         "company": "Acme"
                     }
                 }
-            }, 'script2': {}
+            }, 'workflow2': {}
         }
         self.assertEqual(
-            worker_scripts['script1']['filter_worker_1'],
-            poliglo.get_worker_script_data(worker_scripts, data, "filter_worker_1")
+            worker_workflows['workflow1']['filter_worker_1'],
+            poliglo.get_worker_workflow_data(worker_workflows, data, "filter_worker_1")
         )
         self.assertEqual(
-            worker_scripts['script1']['filter_worker_2'],
-            poliglo.get_worker_script_data(worker_scripts, data, "filter_worker_2")
+            worker_workflows['workflow1']['filter_worker_2'],
+            poliglo.get_worker_workflow_data(worker_workflows, data, "filter_worker_2")
         )
 
     @patch('poliglo.utils.urllib2.urlopen')
     @patch('poliglo.redis.StrictRedis')
     def test_prepare_worker(self, mock_redis, mock_urlopen):
-        worker_type = 'worker_type_1'
+        meta_worker = 'meta_worker_1'
         mocked_urls = {}
 
-        url = poliglo.POLIGLO_SERVER_URL_WORKER_SCRIPTS % (POLIGLO_SERVER_TEST_URL, worker_type)
+        url = poliglo.POLIGLO_SERVER_URL_WORKER_WORKFLOWS % (POLIGLO_SERVER_TEST_URL, meta_worker)
 
         mocked_urls[url] = {
             'body': to_json({
-                'script1': {'default_inputs': {'version': 'v1'}},
-                'script2': {'default_inputs': {'version': 'other'}}
+                'workflow1': {'default_inputs': {'version': 'v1'}},
+                'workflow2': {'default_inputs': {'version': 'other'}}
             })
         }
 
         mock_request(mock_urlopen, mocked_urls)
-        worker_scripts, connection = poliglo.prepare_worker(POLIGLO_SERVER_TEST_URL, worker_type)
+        worker_workflows, connection = poliglo.prepare_worker(POLIGLO_SERVER_TEST_URL, meta_worker)
 
-        expected_worker_scripts = json_loads(mocked_urls[url]['body'])
-        self.assertEqual(expected_worker_scripts, worker_scripts)
+        expected_worker_workflows = json_loads(mocked_urls[url]['body'])
+        self.assertEqual(expected_worker_workflows, worker_workflows)
         # TODO: check connection is Redis type
 
 class TestWriteOutputs(TestCase):
     def setUp(self):
         self.data = {
-            'process': {
-                'type': 'example_process',
+            'workflow_instance': {
+                'workflow': 'example_workflow_instance',
                 'id': '123',
                 'worker_id': 'worker_1'
             },
             'jobs_ids': ['5',]
         }
-        self.process_data = {'message': 'hello'}
-        self.worker_script_data = {
+        self.workflow_instance_data = {'message': 'hello'}
+        self.worker_workflow_data = {
             '__next_workers_types': ['write'],
             'next_workers': ['worker_2']
         }
@@ -155,46 +155,46 @@ class TestWriteOutputs(TestCase):
 
     @patch('poliglo.add_data_to_next_worker')
     def test_set_workers_output(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
+        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
-        self.assertEqual(self.process_data, data_for_next_worker['workers_output']['worker_1'])
+        self.assertEqual(self.workflow_instance_data, data_for_next_worker['workers_output']['worker_1'])
 
     @patch('poliglo.add_data_to_next_worker')
-    def test_set_process_variables(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
+    def test_set_workflow_instance_variables(self, mock_add_data_to_next_worker):
+        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
-        self.assertEqual([self.worker_id, ], data_for_next_worker['process']['workers'])
+        self.assertEqual([self.worker_id, ], data_for_next_worker['workflow_instance']['workers'])
         self.assertEqual(
-            self.worker_script_data['next_workers'][0],
-            data_for_next_worker['process']['worker_id']
+            self.worker_workflow_data['next_workers'][0],
+            data_for_next_worker['workflow_instance']['worker_id']
         )
 
     # TODO: Move this test to default_main_inside
     # def test_mark_job_as_done(self):
-    #     poliglo.write_outputs(self.data, self.process_data, self.worker_scripts, self.connection, self.worker_type)
-    #     self.connection.sadd.assert_any_call('scripts:example_process:processes:123:jobs_ids:done', '5')
+    #     poliglo.write_outputs(self.data, self.workflow_instance_data, self.worker_workflows, self.connection, self.meta_worker)
+    #     self.connection.sadd.assert_any_call('workflows:example_workflow_instance:workflow_instances:123:jobs_ids:done', '5')
 
 
     @patch('poliglo.add_data_to_next_worker')
     def test_add_new_pending_job(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.process_data, self.worker_script_data)
+        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
         self.assertEqual(2, len(data_for_next_worker['jobs_ids']))
 
 class TestStartProcess(TestCase):
     def setUp(self):
         self.connection = Mock()
-        self.process_type = 'example_process'
+        self.workflow = 'example_workflow_instance'
         self.start_worker_id = 'worker_1'
-        self.start_worker_type = 'worker'
-        self.process_name = 'example_process_instance1'
+        self.start_meta_worker = 'worker'
+        self.workflow_instance_name = 'example_workflow_instance_instance1'
         self.data = {'template': '/tmp/lala'}
-        poliglo.start_process(self.connection, self.process_type, self.start_worker_type, self.start_worker_id, self.process_name, self.data)
+        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
 
     def test_inputs_set(self):
         worker_queue, raw_data = self.connection.lpush.call_args[0]
         received_data = json_loads(raw_data)
-        self.assertEqual(poliglo.REDIS_KEY_QUEUE % self.start_worker_type, worker_queue)
+        self.assertEqual(poliglo.REDIS_KEY_QUEUE % self.start_meta_worker, worker_queue)
         self.assertEqual(self.data, received_data['inputs'])
 
     def test_set_jobs_ids(self):
@@ -207,29 +207,29 @@ class TestStartProcess(TestCase):
         received_data = json_loads(raw_data)
         self.assertEqual(self.data, received_data['workers_output']['initial'])
 
-    def test_reuse_already_created_process(self):
+    def test_reuse_already_created_workflow_instance(self):
         _, raw_data = self.connection.lpush.call_args[0]
-        process_data = json_loads(raw_data)
+        workflow_instance_data = json_loads(raw_data)
 
-        poliglo.start_process(self.connection, self.process_type, self.start_worker_type, self.start_worker_id, self.process_name, self.data)
+        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
         _, raw_data = self.connection.lpush.call_args[0]
-        process_data_2 = json_loads(raw_data)
-        self.assertEqual(select_dict_el(process_data, 'process.id'), select_dict_el(process_data_2, 'process.id'))
+        workflow_instance_data_2 = json_loads(raw_data)
+        self.assertEqual(select_dict_el(workflow_instance_data, 'workflow_instance.id'), select_dict_el(workflow_instance_data_2, 'workflow_instance.id'))
 
-    @patch('poliglo.update_process')
-    def test_initial_create_process(self, mocked_update_process):
+    @patch('poliglo.update_workflow_instance')
+    def test_initial_create_workflow_instance(self, mocked_update_workflow_instance):
         connection = Mock()
         connection.exists.side_effect = [0,]
-        poliglo.start_process(connection, self.process_type, self.start_worker_type, self.start_worker_id, self.process_name, self.data)
-        _, process_type, _, process_data = mocked_update_process.call_args[0]
-        self.assertEqual(self.process_type, process_type)
-        self.assertEqual(self.process_name, process_data.get('name'))
+        poliglo.start_workflow_instance(connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
+        _, workflow, _, workflow_instance_data = mocked_update_workflow_instance.call_args[0]
+        self.assertEqual(self.workflow, workflow)
+        self.assertEqual(self.workflow_instance_name, workflow_instance_data.get('name'))
 
 class TestWriteErrorJob(TestCase):
     def test_write_error(self):
         connection = Mock()
         worker_id = 'worker_1'
-        raw_data = to_json({'process': {'type': 'process_1', 'id': '123'}})
+        raw_data = to_json({'workflow_instance': {'workflow': 'workflow_instance_1', 'id': '123'}})
         error = 'one error :('
 
         poliglo.write_error_job(connection, worker_id, raw_data, error)
@@ -241,66 +241,66 @@ class TestWriteErrorJob(TestCase):
 class TestDefaultMainInside(TestCase):
     def setUp(self):
         data = {
-            'process': {
+            'workflow_instance': {
                 'id': '1234',
-                'type': 'example_process',
+                'workflow': 'example_workflow_instance',
                 'worker_id': 'worker_1'
             }, 'jobs_ids': ['35345']
         }
         self.connection = Mock()
         self.connection.brpop.side_effect = [(None, to_json(data))]
-        self.worker_scripts = {
-            'example_process': {
+        self.worker_workflows = {
+            'example_workflow_instance': {
                 'worker_1': {
                     '__next_workers_types': ['worker'],
                     'next_workers': ['worker_2']
                 }
             }
         }
-        self.worker_type = 'worker_1_test'
+        self.meta_worker = 'worker_1_test'
 
     @patch('poliglo.write_finalized_job')
     def test_no_output(self, write_finalized_job):
         def my_func(_, data):
-            return [{'value': data['process']['id']}, ]
-        worker_scripts = {}
+            return [{'value': data['workflow_instance']['id']}, ]
+        worker_workflows = {}
         poliglo.pre_default_main_inside(
-            self.connection, worker_scripts, self.worker_type, my_func
+            self.connection, worker_workflows, self.meta_worker, my_func
         )
-        process_data = write_finalized_job.call_args[0][1]
-        self.assertEqual({'value': '1234'}, process_data)
+        workflow_instance_data = write_finalized_job.call_args[0][1]
+        self.assertEqual({'value': '1234'}, workflow_instance_data)
 
 
     @patch('poliglo.write_outputs')
-    def test_with_process_change_output(self, write_outputs_mock):
+    def test_with_workflow_instance_change_output(self, write_outputs_mock):
         def my_func(_, data):
             return [
-                {'value': data['process']['id'], '__next_workers': ['worker_3']},
+                {'value': data['workflow_instance']['id'], '__next_workers': ['worker_3']},
             ]
         poliglo.pre_default_main_inside(
-            self.connection, self.worker_scripts, self.worker_type, my_func
+            self.connection, self.worker_workflows, self.meta_worker, my_func
         )
-        worker_script_data = write_outputs_mock.call_args[0][3]
-        self.assertEqual(['worker_3',], worker_script_data['next_workers'])
+        worker_workflow_data = write_outputs_mock.call_args[0][3]
+        self.assertEqual(['worker_3',], worker_workflow_data['next_workers'])
 
     @patch('poliglo.write_outputs')
-    def test_with_no_process_data(self, write_outputs_mock):
+    def test_with_no_workflow_instance_data(self, write_outputs_mock):
         def my_func(_, data):
             return [
                 None,
             ]
         poliglo.pre_default_main_inside(
-            self.connection, self.worker_scripts, self.worker_type, my_func
+            self.connection, self.worker_workflows, self.meta_worker, my_func
         )
-        process_data = write_outputs_mock.call_args[0][2]
-        self.assertEqual({}, process_data)
+        workflow_instance_data = write_outputs_mock.call_args[0][2]
+        self.assertEqual({}, workflow_instance_data)
 
     @patch('poliglo.write_finalized_job')
     def test_with_no_data_returned(self, write_finalized_job):
         def my_func(_, data):
             return []
         poliglo.pre_default_main_inside(
-            self.connection, self.worker_scripts, self.worker_type, my_func
+            self.connection, self.worker_workflows, self.meta_worker, my_func
         )
         self.assertEqual('worker_1', write_finalized_job.call_args[0][2])
 
@@ -311,14 +311,14 @@ class TestDefaultMainInside(TestCase):
                 {'args': args, 'kwargs': kwargs},
             ]
         poliglo.pre_default_main_inside(
-            self.connection, self.worker_scripts, self.worker_type, my_func,
+            self.connection, self.worker_workflows, self.meta_worker, my_func,
             "prueba", "prueba2", conn1='conn1 value', conn2='conn2 value'
         )
-        process_data = write_outputs_mock.call_args[0][2]
+        workflow_instance_data = write_outputs_mock.call_args[0][2]
         self.assertEqual({
             'args': ('prueba', 'prueba2'),
             'kwargs': {'conn2': 'conn2 value', 'conn1': 'conn1 value'}
-        }, process_data)
+        }, workflow_instance_data)
 
     @patch('poliglo.write_one_output')
     def test_set_inputs_in_data(self, write_one_output_mock):
@@ -327,7 +327,7 @@ class TestDefaultMainInside(TestCase):
                 {'name': 'this is a test'},
             ]
         poliglo.pre_default_main_inside(
-            self.connection, self.worker_scripts, self.worker_type, my_func
+            self.connection, self.worker_workflows, self.meta_worker, my_func
         )
         data = write_one_output_mock.call_args[0][3]
         self.assertEqual({'name': 'this is a test'}, data.get('inputs'))
