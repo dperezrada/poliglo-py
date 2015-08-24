@@ -141,7 +141,7 @@ def write_finalized_job(data, workflow_instance_data, worker_id, connection):
     data = prepare_write_output(data, workflow_instance_data, worker_id)
     connection.zadd(
         REDIS_KEY_INSTANCE_WORKER_FINALIZED_JOBS % (
-            data['workflow_instance']['worklow'], data['workflow_instance']['id'], worker_id
+            data['workflow_instance']['workflow'], data['workflow_instance']['id'], worker_id
         ),
         time.time(),
         to_json(data)
