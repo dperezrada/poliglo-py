@@ -2,6 +2,8 @@
 from unittest import TestCase
 from mock import Mock, call, patch
 
+from redis.client import StrictRedis
+
 import poliglo
 from poliglo.utils import to_json, json_loads, select_dict_el
 
@@ -36,7 +38,7 @@ class TestInputs(TestCase):
             },
             "next_workers": ["worker1"]
         }
-        self.data = {
+        self.workflow_instance_data = {
             'workers_output': {
                 'get_emails_to_send': {
                     'email': 'test@test.com'
@@ -47,13 +49,13 @@ class TestInputs(TestCase):
             }
         }
     def test_before_select_inputs(self):
-        result = poliglo.get_inputs(self.data, self.worker_workflow_data)
+        result = poliglo.get_inputs(self.workflow_instance_data, self.worker_workflow_data)
         expected = {'email': 'test@test.com', 'template_file': '/tmp/testfile.handlebars'}
         self.assertEqual(expected, result)
 
     def test_before_select_inputs_not_overwrite_input(self):
-        self.data['inputs'] = {'email': 'test_master@test.com'}
-        result = poliglo.get_inputs(self.data, self.worker_workflow_data)
+        self.workflow_instance_data['inputs'] = {'email': 'test_master@test.com'}
+        result = poliglo.get_inputs(self.workflow_instance_data, self.worker_workflow_data)
         expected = {'email': 'test_master@test.com', 'template_file': '/tmp/testfile.handlebars'}
         self.assertEqual(expected, result)
 
@@ -88,7 +90,7 @@ class TestPreparations(TestCase):
         self.assertEqual(self.config, body)
 
     def test_get_worker_workflow_data(self):
-        data = {'workflow_instance': {'workflow': 'workflow1'}}
+        workflow_instance_data = {'workflow_instance': {'workflow': 'workflow1'}}
         worker_workflows = {
             'workflow1': {
                 'filter_worker_1': {
@@ -105,16 +107,19 @@ class TestPreparations(TestCase):
         }
         self.assertEqual(
             worker_workflows['workflow1']['filter_worker_1'],
-            poliglo.get_worker_workflow_data(worker_workflows, data, "filter_worker_1")
+            poliglo.get_worker_workflow_data(
+                worker_workflows, workflow_instance_data, "filter_worker_1"
+            )
         )
         self.assertEqual(
             worker_workflows['workflow1']['filter_worker_2'],
-            poliglo.get_worker_workflow_data(worker_workflows, data, "filter_worker_2")
+            poliglo.get_worker_workflow_data(
+                worker_workflows, workflow_instance_data, "filter_worker_2"
+            )
         )
 
     @patch('poliglo.utils.urllib2.urlopen')
-    @patch('poliglo.redis.StrictRedis')
-    def test_prepare_worker(self, mock_redis, mock_urlopen):
+    def test_prepare_worker(self, mock_urlopen):
         meta_worker = 'meta_worker_1'
         mocked_urls = {}
 
@@ -132,11 +137,11 @@ class TestPreparations(TestCase):
 
         expected_worker_workflows = json_loads(mocked_urls[url]['body'])
         self.assertEqual(expected_worker_workflows, worker_workflows)
-        # TODO: check connection is Redis type
+        self.assertIsInstance(connection, StrictRedis)
 
 class TestWriteOutputs(TestCase):
     def setUp(self):
-        self.data = {
+        self.workflow_instance_data = {
             'workflow_instance': {
                 'workflow': 'example_workflow_instance',
                 'id': '123',
@@ -144,7 +149,7 @@ class TestWriteOutputs(TestCase):
             },
             'jobs_ids': ['5',]
         }
-        self.workflow_instance_data = {'message': 'hello'}
+        self.worker_output_data = {'message': 'hello'}
         self.worker_workflow_data = {
             '__next_workers_types': ['write'],
             'next_workers': ['worker_2']
@@ -155,13 +160,21 @@ class TestWriteOutputs(TestCase):
 
     @patch('poliglo.add_data_to_next_worker')
     def test_set_workers_output(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
+        poliglo.write_outputs(
+            self.connection, self.workflow_instance_data,
+            self.worker_output_data, self.worker_workflow_data
+        )
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
-        self.assertEqual(self.workflow_instance_data, data_for_next_worker['workers_output']['worker_1'])
+        self.assertEqual(
+            self.worker_output_data, data_for_next_worker['workers_output']['worker_1']
+        )
 
     @patch('poliglo.add_data_to_next_worker')
     def test_set_workflow_instance_variables(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
+        poliglo.write_outputs(
+            self.connection, self.workflow_instance_data,
+            self.worker_output_data, self.worker_workflow_data
+        )
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
         self.assertEqual([self.worker_id, ], data_for_next_worker['workflow_instance']['workers'])
         self.assertEqual(
@@ -169,33 +182,30 @@ class TestWriteOutputs(TestCase):
             data_for_next_worker['workflow_instance']['worker_id']
         )
 
-    # TODO: Move this test to default_main_inside
-    # def test_mark_job_as_done(self):
-    #     poliglo.write_outputs(self.data, self.workflow_instance_data, self.worker_workflows, self.connection, self.meta_worker)
-    #     self.connection.sadd.assert_any_call('workflows:example_workflow_instance:workflow_instances:123:jobs_ids:done', '5')
-
-
     @patch('poliglo.add_data_to_next_worker')
     def test_add_new_pending_job(self, mock_add_data_to_next_worker):
-        poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
+        poliglo.write_outputs(
+            self.connection, self.workflow_instance_data,
+            self.worker_output_data, self.worker_workflow_data
+        )
         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
         self.assertEqual(2, len(data_for_next_worker['jobs_ids']))
 
-class TestStartProcess(TestCase):
+class TestStartWorkflowInstance(TestCase):
     def setUp(self):
         self.connection = Mock()
         self.workflow = 'example_workflow_instance'
         self.start_worker_id = 'worker_1'
         self.start_meta_worker = 'worker'
         self.workflow_instance_name = 'example_workflow_instance_instance1'
-        self.data = {'template': '/tmp/lala'}
-        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
+        self.initial_data = {'template': '/tmp/lala'}
+        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.initial_data)
 
     def test_inputs_set(self):
         worker_queue, raw_data = self.connection.lpush.call_args[0]
         received_data = json_loads(raw_data)
         self.assertEqual(poliglo.REDIS_KEY_QUEUE % self.start_meta_worker, worker_queue)
-        self.assertEqual(self.data, received_data['inputs'])
+        self.assertEqual(self.initial_data, received_data['inputs'])
 
     def test_set_jobs_ids(self):
         _, raw_data = self.connection.lpush.call_args[0]
@@ -205,13 +215,13 @@ class TestStartProcess(TestCase):
     def test_inital_worker_output(self):
         _, raw_data = self.connection.lpush.call_args[0]
         received_data = json_loads(raw_data)
-        self.assertEqual(self.data, received_data['workers_output']['initial'])
+        self.assertEqual(self.initial_data, received_data['workers_output']['initial'])
 
     def test_reuse_already_created_workflow_instance(self):
         _, raw_data = self.connection.lpush.call_args[0]
         workflow_instance_data = json_loads(raw_data)
 
-        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
+        poliglo.start_workflow_instance(self.connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.initial_data)
         _, raw_data = self.connection.lpush.call_args[0]
         workflow_instance_data_2 = json_loads(raw_data)
         self.assertEqual(select_dict_el(workflow_instance_data, 'workflow_instance.id'), select_dict_el(workflow_instance_data_2, 'workflow_instance.id'))
@@ -220,7 +230,7 @@ class TestStartProcess(TestCase):
     def test_initial_create_workflow_instance(self, mocked_update_workflow_instance):
         connection = Mock()
         connection.exists.side_effect = [0,]
-        poliglo.start_workflow_instance(connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.data)
+        poliglo.start_workflow_instance(connection, self.workflow, self.start_meta_worker, self.start_worker_id, self.workflow_instance_name, self.initial_data)
         _, workflow, _, workflow_instance_data = mocked_update_workflow_instance.call_args[0]
         self.assertEqual(self.workflow, workflow)
         self.assertEqual(self.workflow_instance_name, workflow_instance_data.get('name'))
@@ -229,18 +239,18 @@ class TestWriteErrorJob(TestCase):
     def test_write_error(self):
         connection = Mock()
         worker_id = 'worker_1'
-        raw_data = to_json({'workflow_instance': {'workflow': 'workflow_instance_1', 'id': '123'}})
+        workflow_instance_data = to_json({'workflow_instance': {'workflow': 'workflow_instance_1', 'id': '123'}})
         error = 'one error :('
 
-        poliglo.write_error_job(connection, worker_id, raw_data, error)
+        poliglo.write_error_job(connection, worker_id, workflow_instance_data, error)
 
-        _, _, raw_data = connection.zadd.call_args[0]
-        received_data = json_loads(raw_data)
+        _, _, workflow_instance_received = connection.zadd.call_args[0]
+        received_data = json_loads(workflow_instance_received)
         self.assertEqual(error, received_data['workers_error'][worker_id]['error'])
 
 class TestDefaultMainInside(TestCase):
     def setUp(self):
-        data = {
+        workflow_instance_data = {
             'workflow_instance': {
                 'id': '1234',
                 'workflow': 'example_workflow_instance',
@@ -248,7 +258,7 @@ class TestDefaultMainInside(TestCase):
             }, 'jobs_ids': ['35345']
         }
         self.connection = Mock()
-        self.connection.brpop.side_effect = [(None, to_json(data))]
+        self.connection.brpop.side_effect = [(None, to_json(workflow_instance_data))]
         self.worker_workflows = {
             'example_workflow_instance': {
                 'worker_1': {
@@ -331,3 +341,29 @@ class TestDefaultMainInside(TestCase):
         )
         data = write_one_output_mock.call_args[0][3]
         self.assertEqual({'name': 'this is a test'}, data.get('inputs'))
+
+# class TestWriteWorkerJobTimming(TestCase):
+#     def setUp(self):
+#         self.data = {
+#             'workflow_instance': {
+#                 'workflow': 'example_workflow_instance',
+#                 'id': '123',
+#                 'worker_id': 'worker_1'
+#             },
+#             'jobs_ids': ['5',]
+#         }
+#         self.workflow_instance_data = {'message': 'hello'}
+#         self.worker_workflow_data = {
+#             '__next_workers_types': ['write'],
+#             'next_workers': ['worker_2']
+#         }
+#         self.connection = Mock()
+
+#         self.worker_id = 'worker_1'
+
+#     @patch('poliglo.add_data_to_next_worker')
+#     def test_set_workers_output(self, mock_add_data_to_next_worker):
+#         poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
+#         print mock_add_data_to_next_worker.call_args
+#         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
+#         self.assertEqual(self.workflow_instance_data, data_for_next_worker['workers_output']['worker_1'])
