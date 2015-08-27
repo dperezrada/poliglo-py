@@ -15,6 +15,7 @@ REDIS_KEY_QUEUE = 'queue:%s'
 REDIS_KEY_QUEUE_FINALIZED = 'queue:finalized'
 REDIS_KEY_INSTANCES = 'workflows:%s:workflow_instances'
 REDIS_KEY_ONE_INSTANCE = "workflows:%s:workflow_instances:%s"
+REDIS_KEY_INSTANCE_WORKER_TIMING = "workflows:%s:workflow_instances:%s:workers:%s:timing"
 REDIS_KEY_INSTANCE_WORKER_FINALIZED_JOBS = "workflows:%s:workflow_instances:%s:workers:%s:finalized"
 REDIS_KEY_INSTANCE_WORKER_JOBS = "workflows:%s:workflow_instances:%s:workers:%s:jobs_ids:%s"
 REDIS_KEY_INSTANCE_WORKER_ERRORS = "workflows:%s:workflow_instances:%s:workers:%s:errors"
@@ -77,10 +78,14 @@ def get_job_data(raw_data, encoding='utf-8'):
 def add_data_to_next_worker(connection, output, raw_data):
     connection.lpush(REDIS_KEY_QUEUE % output, raw_data)
 
-def update_done_jobs(connection, workflow, instance_id, worker_id, job_id):
+def update_done_jobs(connection, workflow, instance_id, worker_id, job_id, start_time):
     connection.sadd(
         REDIS_KEY_INSTANCE_WORKER_JOBS % (workflow, instance_id, worker_id, 'done'),
         job_id
+    )
+    connection.lpush(
+        REDIS_KEY_INSTANCE_WORKER_TIMING % (workflow, instance_id, worker_id),
+        time.time() - start_time
     )
 
 def add_new_job_id(connection, workflow, instance_id, worker, job_id):
@@ -256,51 +261,56 @@ def write_error_job(connection, worker_id, raw_data, error):
 def default_main_inside(
         connection, worker_workflows, queue_message, workflow_instance_func, *args, **kwargs
     ):
+    process_message_start_time = time.time()
     if queue_message is not None:
         raw_data = queue_message[1]
-        # try:
-        workflow_instance_data = get_job_data(raw_data)
-        last_job_id = workflow_instance_data['jobs_ids'][-1]
-        worker_id = workflow_instance_data['workflow_instance']['worker_id']
-        worker_workflow_data = get_worker_workflow_data(
-            worker_workflows, workflow_instance_data,
-            workflow_instance_data['workflow_instance']['worker_id']
-        )
-        nodata = True
-        for worker_output_data in workflow_instance_func(
-                worker_workflow_data, workflow_instance_data, *args, **kwargs
-            ):
-            nodata = False
-            if not worker_output_data:
-                worker_output_data = {}
-            if worker_output_data.get('__next_workers'):
-                worker_workflow_data['next_workers'] = worker_output_data.get(
-                    '__next_workers', []
+        try:
+            workflow_instance_data = get_job_data(raw_data)
+            last_job_id = workflow_instance_data['jobs_ids'][-1]
+            worker_id = workflow_instance_data['workflow_instance']['worker_id']
+            worker_workflow_data = get_worker_workflow_data(
+                worker_workflows, workflow_instance_data,
+                workflow_instance_data['workflow_instance']['worker_id']
+            )
+            nodata = True
+            for worker_output_data in workflow_instance_func(
+                    worker_workflow_data, workflow_instance_data, *args, **kwargs
+                ):
+                nodata = False
+                if not worker_output_data:
+                    worker_output_data = {}
+                if worker_output_data.get('__next_workers'):
+                    worker_workflow_data['next_workers'] = worker_output_data.get(
+                        '__next_workers', []
+                    )
+                if len(worker_workflow_data.get('next_workers', [])) == 0:
+                    # aqui
+                    write_finalized_job(
+                        workflow_instance_data, worker_output_data, worker_id, connection
+                    )
+                    continue
+                # aqui
+                write_outputs(
+                    connection, workflow_instance_data, worker_output_data, worker_workflow_data
                 )
-            if len(worker_workflow_data.get('next_workers', [])) == 0:
+            if nodata:
+                worker_output_data = {}
+                # aqui
                 write_finalized_job(
                     workflow_instance_data, worker_output_data, worker_id, connection
                 )
-                continue
-            write_outputs(
-                connection, workflow_instance_data, worker_output_data, worker_workflow_data
+            update_done_jobs(
+                connection, workflow_instance_data['workflow_instance']['workflow'],
+                workflow_instance_data['workflow_instance']['id'], worker_id,
+                last_job_id, process_message_start_time
             )
-        if nodata:
-            worker_output_data = {}
-            write_finalized_job(
-                workflow_instance_data, worker_output_data, worker_id, connection
-            )
-        update_done_jobs(
-            connection, workflow_instance_data['workflow_instance']['workflow'],
-            workflow_instance_data['workflow_instance']['id'], worker_id, last_job_id
-        )
-        # except Exception, e:
-        #     worker_id = 'unknown'
-        #     try:
-        #         worker_id = workflow_instance_data['workflow_instance']['worker_id']
-        #     except Exception, e:
-        #         pass
-        #     write_error_job(connection, worker_id, raw_data, e)
+        except Exception, e:
+            worker_id = 'unknown'
+            try:
+                worker_id = workflow_instance_data['workflow_instance']['worker_id']
+            except Exception, e:
+                pass
+            write_error_job(connection, worker_id, raw_data, e)
         # TODO: Manage if worker fails and message is lost
 
 def pre_default_main_inside(

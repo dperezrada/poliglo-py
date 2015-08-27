@@ -271,8 +271,8 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_finalized_job')
     def test_no_output(self, write_finalized_job):
-        def my_func(_, data):
-            return [{'value': data['workflow_instance']['id']}, ]
+        def my_func(_, workflow_instance_data):
+            return [{'value': workflow_instance_data['workflow_instance']['id']}, ]
         worker_workflows = {}
         poliglo.pre_default_main_inside(
             self.connection, worker_workflows, self.meta_worker, my_func
@@ -283,9 +283,10 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_outputs')
     def test_with_workflow_instance_change_output(self, write_outputs_mock):
-        def my_func(_, data):
+        def my_func(_, workflow_instance_data):
             return [
-                {'value': data['workflow_instance']['id'], '__next_workers': ['worker_3']},
+                {'value': workflow_instance_data['workflow_instance']['id'],
+                '__next_workers': ['worker_3']},
             ]
         poliglo.pre_default_main_inside(
             self.connection, self.worker_workflows, self.meta_worker, my_func
@@ -295,7 +296,7 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_outputs')
     def test_with_no_workflow_instance_data(self, write_outputs_mock):
-        def my_func(_, data):
+        def my_func(_, workflow_instance_data):
             return [
                 None,
             ]
@@ -307,7 +308,7 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_finalized_job')
     def test_with_no_data_returned(self, write_finalized_job):
-        def my_func(_, data):
+        def my_func(_, workflow_instance_data):
             return []
         poliglo.pre_default_main_inside(
             self.connection, self.worker_workflows, self.meta_worker, my_func
@@ -316,7 +317,7 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_outputs')
     def test_with_default_args_and_kwargs(self, write_outputs_mock):
-        def my_func(_, data, *args, **kwargs):
+        def my_func(_, workflow_instance_data, *args, **kwargs):
             return [
                 {'args': args, 'kwargs': kwargs},
             ]
@@ -332,38 +333,28 @@ class TestDefaultMainInside(TestCase):
 
     @patch('poliglo.write_one_output')
     def test_set_inputs_in_data(self, write_one_output_mock):
-        def my_func(_, data):
+        def my_func(_, workflow_instance_data):
             return [
                 {'name': 'this is a test'},
             ]
         poliglo.pre_default_main_inside(
             self.connection, self.worker_workflows, self.meta_worker, my_func
         )
-        data = write_one_output_mock.call_args[0][3]
-        self.assertEqual({'name': 'this is a test'}, data.get('inputs'))
+        workflow_instance_data = write_one_output_mock.call_args[0][3]
+        self.assertEqual({'name': 'this is a test'}, workflow_instance_data.get('inputs'))
 
-# class TestWriteWorkerJobTimming(TestCase):
-#     def setUp(self):
-#         self.data = {
-#             'workflow_instance': {
-#                 'workflow': 'example_workflow_instance',
-#                 'id': '123',
-#                 'worker_id': 'worker_1'
-#             },
-#             'jobs_ids': ['5',]
-#         }
-#         self.workflow_instance_data = {'message': 'hello'}
-#         self.worker_workflow_data = {
-#             '__next_workers_types': ['write'],
-#             'next_workers': ['worker_2']
-#         }
-#         self.connection = Mock()
-
-#         self.worker_id = 'worker_1'
-
-#     @patch('poliglo.add_data_to_next_worker')
-#     def test_set_workers_output(self, mock_add_data_to_next_worker):
-#         poliglo.write_outputs(self.connection, self.data, self.workflow_instance_data, self.worker_workflow_data)
-#         print mock_add_data_to_next_worker.call_args
-#         data_for_next_worker = json_loads(mock_add_data_to_next_worker.call_args[0][2])
-#         self.assertEqual(self.workflow_instance_data, data_for_next_worker['workers_output']['worker_1'])
+    @patch('poliglo.write_one_output')
+    def test_set_worker_times(self, write_one_output_mock):
+        def my_func(_, workflow_instance_data):
+            return [
+                {'name': 'this is a test'},
+            ]
+        poliglo.pre_default_main_inside(
+            self.connection, self.worker_workflows, self.meta_worker, my_func
+        )
+        key, timming = self.connection.lpush.call_args[0]
+        self.assertEqual(
+            'workflows:example_workflow_instance:workflow_instances:1234:workers:worker_1:timing',
+            key
+        )
+        self.assertGreaterEqual(0.01, timming)
