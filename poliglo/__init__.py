@@ -110,6 +110,14 @@ def update_workflow_instance(
         )
     pipe.execute()
 
+def get_workflow_instance_key(
+        connection, workflow, workflow_instance_id, key
+    ):
+        return connection.hget(
+            REDIS_KEY_ONE_INSTANCE % (workflow, workflow_instance_id),
+            key
+        )
+
 def update_workflow_instance_key(
         connection, workflow, workflow_instance_id, key, value
     ):
@@ -118,7 +126,6 @@ def update_workflow_instance_key(
             key,
             value
         )
-
 
 def workflow_instance_exists(connection, workflow, workflow_instance_id):
     return connection.exists(REDIS_KEY_ONE_INSTANCE % (workflow, workflow_instance_id))
@@ -273,7 +280,13 @@ def default_main_inside(
         raw_data = queue_message[1]
         try:
             workflow_instance_data = get_job_data(raw_data)
-            if not workflow_instance_data.get('start_time'):
+            start_time = get_workflow_instance_key(
+                connection,
+                workflow_instance_data['workflow_instance']['workflow'],
+                workflow_instance_data['workflow_instance']['id'],
+                'start_time'
+            )
+            if not start_time:
                 update_workflow_instance_key(
                     connection,
                     workflow_instance_data['workflow_instance']['workflow'],
