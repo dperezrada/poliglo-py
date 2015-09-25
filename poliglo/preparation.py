@@ -6,14 +6,12 @@ from redis import StrictRedis
 from poliglo.variables import POLIGLO_SERVER_URL_WORKER_CONFIG, POLIGLO_SERVER_URL_WORKER_WORKFLOWS
 from poliglo.utils import make_request, json_loads, select_dict_el
 
-def get_connection(worker_config, target='redis'):
-    """Get connection to the target storage, only redis is supported right now"""
-    if target == 'redis':
-        return StrictRedis(
-            host=worker_config.get('REDIS_HOST'),
-            port=worker_config.get('REDIS_PORT'),
-            db=worker_config.get('REDIS_DB')
-        )
+def get_connection(worker_config):
+    return StrictRedis(
+        host=worker_config.get('REDIS_HOST'),
+        port=worker_config.get('REDIS_PORT'),
+        db=worker_config.get('REDIS_DB')
+    )
 
 def get_config(master_mind_url, meta_worker):
     _, _, content = make_request(POLIGLO_SERVER_URL_WORKER_CONFIG % (master_mind_url, meta_worker))

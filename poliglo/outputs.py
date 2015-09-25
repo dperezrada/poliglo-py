@@ -57,13 +57,14 @@ def write_outputs(connection, workflow_instance_data, worker_output_data, worker
         new_workflow_instance_data['workflow_instance']['workflow'],
         new_workflow_instance_data['workflow_instance']['id']
     )
-    pipe = connection.pipeline()
+    # TODO: use pipline
+    # pipe = connection.pipeline()
     workers_outputs_types = worker_workflow_data.get('__next_workers_types', [])
     for i, output_worker_id in enumerate(worker_workflow_data.get('next_workers', [])):
         write_one_output(
             connection, workers_outputs_types[i], output_worker_id, new_workflow_instance_data
         )
-    pipe.execute()
+    # pipe.execute()
 
 def write_finalized_job(workflow_instance_data, worker_output_data, worker_id, connection):
     # prepare_write_output(workflow_instance_data, worker_output_data, worker_id):
@@ -85,7 +86,7 @@ def write_finalized_job(workflow_instance_data, worker_output_data, worker_id, c
             'workflow_instance_id': new_workflow_instance_data['workflow_instance']['id'],
             'workflow_instance_name': new_workflow_instance_data['workflow_instance'].get(
                 'name', 'untitled'),
-            # TODO: be able to always say the meta_worker
+            # TODO: be able to always return a valid meta_worker
             'meta_worker': new_workflow_instance_data['workflow_instance'].get(
                 'meta_worker', 'not sure'
             ),

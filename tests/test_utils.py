@@ -10,13 +10,13 @@ class TestUtilsSelectAndSetDict(TestCase):
     def setUp(self):
         self.data = {'lala': {'hello': 'This is great'}}
 
-    def test_not_exists_path(self):
+    def test_select_not_exists_path(self):
         result = select_dict_el(self.data, 'not.exists')
         self.assertEqual(None, result)
 
     def test_not_exists_path_default_return(self):
-        result = select_dict_el(self.data, 'not.exists', 'Default')
-        self.assertEqual('Default', result)
+        result = select_dict_el(self.data, 'not.exists', 'My Default')
+        self.assertEqual('My Default', result)
 
     def test_get_correct_path(self):
         result = select_dict_el(self.data, 'lala.hello')
@@ -28,9 +28,9 @@ class TestUtilsSelectAndSetDict(TestCase):
         self.assertEqual('See you', result)
 
     def test_set_dict_el_not_existing_path(self):
-        set_dict_el(self.data, 'lala.hasta.la.vista.baby', 'See you')
-        result = select_dict_el(self.data, 'lala.hasta.la.vista.baby')
-        self.assertEqual('See you', result)
+        set_dict_el(self.data, 'lala.hasta.la.vista', 'Baby')
+        result = select_dict_el(self.data, 'lala.hasta.la.vista')
+        self.assertEqual('Baby', result)
 
 
 class TestUtilsMakeRequest(TestCase):
