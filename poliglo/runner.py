@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+import sys
+import imp
 from os import environ
+from os.path import dirname, basename, splitext
 from time import time
 
-from poliglo.preparation import prepare_worker, get_worker_workflow_data
+from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
 from poliglo.variables import REDIS_KEY_QUEUE
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs
@@ -110,3 +113,23 @@ def default_main_inside(
             write_error_job(connection, worker_id, raw_data, e)
         # TODO: Manage if worker fails and message is lost
 
+# You can execute this: python -m poliglo.runner file.py
+# file.py must have a function called 'process'
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print "Missing argument: worker python script"
+        sys.exit(-1)
+    filename = sys.argv[1]
+    basepath = dirname(filename)
+    module_name = splitext(basename(filename))[0]
+    info = imp.find_module(module_name, [basepath])
+    module = imp.load_module(module_name, *info)
+
+    config = get_config(environ.get('POLIGLO_SERVER_URL'), 'all')
+    connection = get_connection(config)
+    default_main(
+        environ.get('POLIGLO_SERVER_URL'),
+        module_name,
+        module.process,
+        {'connection': connection}
+    )
