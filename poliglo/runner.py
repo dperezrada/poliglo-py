@@ -131,5 +131,5 @@ if __name__ == '__main__':
         environ.get('POLIGLO_SERVER_URL'),
         module_name,
         module.process,
-        connection
+        {'connection': connection}
     )
