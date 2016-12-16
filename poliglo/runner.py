@@ -125,11 +125,16 @@ if __name__ == '__main__':
     info = imp.find_module(module_name, [basepath])
     module = imp.load_module(module_name, *info)
 
-    config = get_config(environ.get('POLIGLO_SERVER_URL'), 'all')
-    connection = get_connection(config)
-    default_main(
-        environ.get('POLIGLO_SERVER_URL'),
-        module_name,
-        module.process,
-        {'connection': connection}
-    )
+    # wait_jobs.py has a main function
+    main_function = getattr(module, 'main', None)
+    if main_function:
+        main_function()
+    else:
+        config = get_config(environ.get('POLIGLO_SERVER_URL'), 'all')
+        connection = get_connection(config)
+        default_main(
+            environ.get('POLIGLO_SERVER_URL'),
+            module_name,
+            module.process,
+            {'connection': connection}
+        )
