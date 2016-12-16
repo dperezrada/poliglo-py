@@ -1,14 +1,13 @@
 from setuptools import setup, find_packages
-import sys, os
 
-version = '0.1.1'
+version = '0.1.2'
 
 setup(name='poliglo',
       version=version,
       description="Python client for poliglo (https://github.com/dperezrada/poliglo)",
       long_description="""\
 """,
-      classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+      classifiers=[],  # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
       keywords='',
       author='Daniel P\xc3\xa9rez Rada',
       author_email='dperezrada@gmail.com',
