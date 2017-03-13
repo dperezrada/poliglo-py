@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 REDIS_KEY_QUEUE = 'queue:%s'
+REDIS_KEY_QUEUE_PROCESSING = 'queue:processing:%s'
 REDIS_KEY_QUEUE_FINALIZED = 'queue:finalized'
 REDIS_KEY_INSTANCES = 'workflows:%s:workflow_instances'
 REDIS_KEY_ONE_INSTANCE = "workflows:%s:workflow_instances:%s"

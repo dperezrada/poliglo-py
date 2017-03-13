@@ -6,7 +6,7 @@ import traceback
 
 from poliglo.variables import REDIS_KEY_INSTANCE_WORKER_JOBS, REDIS_KEY_QUEUE, \
     REDIS_KEY_INSTANCE_WORKER_FINALIZED_JOBS, REDIS_KEY_QUEUE_FINALIZED, \
-    REDIS_KEY_INSTANCE_WORKER_ERRORS
+    REDIS_KEY_INSTANCE_WORKER_ERRORS, REDIS_KEY_QUEUE_PROCESSING
 from poliglo.utils import to_json, json_loads, convert_object_to_unicode
 from poliglo.status import update_workflow_instance
 
@@ -46,7 +46,8 @@ def prepare_write_output(workflow_instance_data, worker_output_data, worker_id):
     new_workflow_instance_data['inputs'] = worker_output_data
     return new_workflow_instance_data
 
-def write_outputs(connection, workflow_instance_data, worker_output_data, worker_workflow_data):
+def write_outputs(connection, workflow_instance_data, worker_output_data, worker_workflow_data,
+                  raw_data):
     new_workflow_instance_data = prepare_write_output(
         workflow_instance_data,
         worker_output_data,
@@ -64,6 +65,8 @@ def write_outputs(connection, workflow_instance_data, worker_output_data, worker
         write_one_output(
             connection, workers_outputs_types[i], output_worker_id, new_workflow_instance_data
         )
+    meta_worker = workflow_instance_data['workflow_instance']['meta_worker']
+    connection.lrem(REDIS_KEY_QUEUE_PROCESSING % meta_worker, -1, raw_data)
     # pipe.execute()
 
 def write_finalized_job(workflow_instance_data, worker_output_data, worker_id, connection):

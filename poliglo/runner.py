@@ -7,7 +7,7 @@ from time import time
 
 from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
-from poliglo.variables import REDIS_KEY_QUEUE
+from poliglo.variables import REDIS_KEY_QUEUE, REDIS_KEY_QUEUE_PROCESSING
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
 
@@ -39,7 +39,7 @@ def default_main(master_mind_url, meta_worker, workflow_instance_func, *args, **
 def default_main_inside_wrapper(
         connection, worker_workflows, meta_worker, workflow_instance_func, *args, **kwargs
     ):
-    queue_message = connection.brpop([REDIS_KEY_QUEUE % meta_worker,])
+    queue_message = connection.brpoplpush(REDIS_KEY_QUEUE % meta_worker, REDIS_KEY_QUEUE_PROCESSING % meta_worker)
     default_main_inside(
         connection, worker_workflows, queue_message, workflow_instance_func, *args, **kwargs
     )
@@ -49,9 +49,8 @@ def default_main_inside(
     ):
     process_message_start_time = time()
     if queue_message is not None:
-        raw_data = queue_message[1]
         try:
-            workflow_instance_data = get_job_data(raw_data)
+            workflow_instance_data = get_job_data(queue_message)
             start_time = get_workflow_instance_key(
                 connection,
                 workflow_instance_data['workflow_instance']['workflow'],
@@ -91,7 +90,8 @@ def default_main_inside(
                     continue
                 # aqui
                 write_outputs(
-                    connection, workflow_instance_data, worker_output_data, worker_workflow_data
+                    connection, workflow_instance_data, worker_output_data, worker_workflow_data,
+                    queue_message
                 )
             if nodata:
                 worker_output_data = {}
@@ -110,7 +110,7 @@ def default_main_inside(
                 worker_id = workflow_instance_data['workflow_instance']['worker_id']
             except Exception, e:
                 pass
-            write_error_job(connection, worker_id, raw_data, e)
+            write_error_job(connection, worker_id, queue_message, e)
         # TODO: Manage if worker fails and message is lost
 
 # You can execute this: python -m poliglo.runner file.py
@@ -131,10 +131,10 @@ if __name__ == '__main__':
         main_function()
     else:
         config = get_config(environ.get('POLIGLO_SERVER_URL'), 'all')
-        connection = get_connection(config)
+        conn = get_connection(config)
         default_main(
             environ.get('POLIGLO_SERVER_URL'),
             module_name,
             module.process,
-            {'connection': connection}
+            {'connection': conn}
         )
