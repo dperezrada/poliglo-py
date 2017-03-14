@@ -8,7 +8,7 @@ from time import time
 from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs, \
-    mark_meta_worker_as_processed, mark_meta_worker_as_finalized
+    mark_meta_worker_as_processed, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
 
 def default_main(master_mind_url, meta_worker, workflow_instance_func, *args, **kwargs):
@@ -52,6 +52,9 @@ def default_main_inside(
         return
     try:
         workflow_instance_data = get_job_data(queue_message)
+        meta_worker = workflow_instance_data['workflow_instance']['meta_worker']
+        worker_id = workflow_instance_data['workflow_instance']['worker_id']
+        move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id)
         start_time = get_workflow_instance_key(
             connection,
             workflow_instance_data['workflow_instance']['workflow'],
@@ -67,7 +70,6 @@ def default_main_inside(
                 process_message_start_time
             )
         last_job_id = workflow_instance_data['jobs_ids'][-1]
-        worker_id = workflow_instance_data['workflow_instance']['worker_id']
         worker_workflow_data = get_worker_workflow_data(
             worker_workflows, workflow_instance_data,
             workflow_instance_data['workflow_instance']['worker_id']
@@ -101,8 +103,7 @@ def default_main_inside(
             workflow_instance_data['workflow_instance']['id'], worker_id,
             last_job_id, process_message_start_time
         )
-        meta_worker = workflow_instance_data['workflow_instance']['meta_worker']
-        mark_meta_worker_as_finalized(connection, meta_worker, queue_message)
+        mark_worker_id_as_finalized(connection, worker_id, queue_message)
     except Exception, e:
         worker_id = 'unknown'
         try:

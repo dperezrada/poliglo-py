@@ -52,5 +52,8 @@ def stats_add_new_instance(connection, workflow, workflow_instance_info):
 def mark_meta_worker_as_processed(connection, meta_worker, timeout=0):
     return connection.brpoplpush(REDIS_KEY_QUEUE % meta_worker, REDIS_KEY_QUEUE_PROCESSING % meta_worker, timeout)
 
-def mark_meta_worker_as_finalized(connection, meta_worker, raw_data):
+def move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id):
+    return connection.brpoplpush(REDIS_KEY_QUEUE_PROCESSING % meta_worker, REDIS_KEY_QUEUE_PROCESSING % worker_id)
+
+def mark_worker_id_as_finalized(connection, meta_worker, raw_data):
     return connection.lrem(REDIS_KEY_QUEUE_PROCESSING % meta_worker, -1, raw_data)
