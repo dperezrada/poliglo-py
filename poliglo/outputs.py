@@ -46,8 +46,7 @@ def prepare_write_output(workflow_instance_data, worker_output_data, worker_id):
     new_workflow_instance_data['inputs'] = worker_output_data
     return new_workflow_instance_data
 
-def write_outputs(connection, workflow_instance_data, worker_output_data, worker_workflow_data,
-                  raw_data):
+def write_outputs(connection, workflow_instance_data, worker_output_data, worker_workflow_data):
     new_workflow_instance_data = prepare_write_output(
         workflow_instance_data,
         worker_output_data,
@@ -58,15 +57,13 @@ def write_outputs(connection, workflow_instance_data, worker_output_data, worker
         new_workflow_instance_data['workflow_instance']['workflow'],
         new_workflow_instance_data['workflow_instance']['id']
     )
-    # TODO: use pipline
+    # TODO: use pipeline
     # pipe = connection.pipeline()
     workers_outputs_types = worker_workflow_data.get('__next_workers_types', [])
     for i, output_worker_id in enumerate(worker_workflow_data.get('next_workers', [])):
         write_one_output(
             connection, workers_outputs_types[i], output_worker_id, new_workflow_instance_data
         )
-    meta_worker = workflow_instance_data['workflow_instance']['meta_worker']
-    connection.lrem(REDIS_KEY_QUEUE_PROCESSING % meta_worker, -1, raw_data)
     # pipe.execute()
 
 def write_finalized_job(workflow_instance_data, worker_output_data, worker_id, connection):

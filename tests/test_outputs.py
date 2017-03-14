@@ -28,7 +28,7 @@ class TestWriteOutputs(TestCase):
     def test_set_workers_output(self, mock_add_data_to_next_worker):
         poliglo.outputs.write_outputs(
             self.connection, self.workflow_instance_data,
-            self.worker_output_data, self.worker_workflow_data, {}
+            self.worker_output_data, self.worker_workflow_data
         )
         data_for_next_worker = poliglo.utils.json_loads(
             mock_add_data_to_next_worker.call_args[0][2]
@@ -41,7 +41,7 @@ class TestWriteOutputs(TestCase):
     def test_set_workflow_instance_variables(self, mock_add_data_to_next_worker):
         poliglo.outputs.write_outputs(
             self.connection, self.workflow_instance_data,
-            self.worker_output_data, self.worker_workflow_data, {}
+            self.worker_output_data, self.worker_workflow_data
         )
         data_for_next_worker = poliglo.utils.json_loads(
             mock_add_data_to_next_worker.call_args[0][2]
@@ -56,7 +56,7 @@ class TestWriteOutputs(TestCase):
     def test_add_new_pending_job(self, mock_add_data_to_next_worker):
         poliglo.outputs.write_outputs(
             self.connection, self.workflow_instance_data,
-            self.worker_output_data, self.worker_workflow_data, {}
+            self.worker_output_data, self.worker_workflow_data
         )
         data_for_next_worker = poliglo.utils.json_loads(
             mock_add_data_to_next_worker.call_args[0][2]
