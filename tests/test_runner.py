@@ -15,7 +15,8 @@ class TestDefaultMainInside(TestCase):
             }, 'jobs_ids': ['35345']
         }
         self.connection = mock.Mock()
-        self.connection.brpoplpush.side_effect = [poliglo.utils.to_json(workflow_instance_data)]
+        workflow_data = poliglo.utils.to_json(workflow_instance_data)
+        self.connection.brpoplpush.side_effect = [workflow_data, workflow_data]
         self.worker_workflows = {
             'example_workflow_instance': {
                 'worker_1': {
