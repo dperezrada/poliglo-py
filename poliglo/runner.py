@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import imp
+import signal
 from os import environ
 from os.path import dirname, basename, splitext
 from time import time
@@ -43,6 +44,7 @@ def default_main_inside_wrapper(
         connection, worker_workflows, meta_worker, workflow_instance_func, *args, **kwargs
     ):
     queue_message = mark_meta_worker_as_processed(connection, meta_worker)
+    set_signal_handler(cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, queue_message)
     default_main_inside(
         connection, worker_workflows, queue_message, workflow_instance_func, meta_worker, *args, **kwargs
     )
@@ -58,6 +60,7 @@ def default_main_inside(
         workflow_instance_data = get_job_data(queue_message)
         worker_id = workflow_instance_data['workflow_instance']['worker_id']
         move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id)
+        set_signal_handler(cleanup_queues, connection, meta_worker, worker_id, queue_message)
         start_time = get_workflow_instance_key(
             connection,
             workflow_instance_data['workflow_instance']['workflow'],
@@ -108,10 +111,22 @@ def default_main_inside(
         mark_worker_id_as_finalized(connection, worker_id, queue_message)
     except Exception, e:
         write_error_job(connection, worker_id, queue_message, e)
-        if worker_id == WORKER_ID_UNKNOWN:
-            undo_mark_meta_worker_as_processed(connection, meta_worker)
-        else:
-            mark_worker_id_as_finalized(connection, worker_id, queue_message)
+        cleanup_queues(connection, meta_worker, worker_id, queue_message)
+
+def cleanup_queues(connection, meta_worker, worker_id, queue_message):
+    if worker_id == WORKER_ID_UNKNOWN:
+        undo_mark_meta_worker_as_processed(connection, meta_worker)
+    else:
+        mark_worker_id_as_finalized(connection, worker_id, queue_message)
+
+def set_signal_handler(handler, *args, **kwargs):
+    """Handle program termination via signals."""
+    def my_handler(signalnum, _handle):
+        print 'Trapped signal %s' % signalnum
+        handler(*args, **kwargs)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, my_handler)
+    signal.signal(signal.SIGINT, my_handler)
 
 # You can execute this: python -m poliglo.runner file.py
 # file.py must have a function called 'process'
