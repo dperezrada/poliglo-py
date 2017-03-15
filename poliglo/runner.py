@@ -8,8 +8,11 @@ from time import time
 from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs, \
-    mark_meta_worker_as_processed, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue
+    mark_meta_worker_as_processed, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue, \
+    undo_mark_meta_worker_as_processed, mark_worker_id_as_zombie
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
+
+WORKER_ID_UNKNOWN = 'unknown'
 
 def default_main(master_mind_url, meta_worker, workflow_instance_func, *args, **kwargs):
     worker_workflows, connection = prepare_worker(master_mind_url, meta_worker)
@@ -41,18 +44,18 @@ def default_main_inside_wrapper(
     ):
     queue_message = mark_meta_worker_as_processed(connection, meta_worker)
     default_main_inside(
-        connection, worker_workflows, queue_message, workflow_instance_func, *args, **kwargs
+        connection, worker_workflows, queue_message, workflow_instance_func, meta_worker, *args, **kwargs
     )
 
 def default_main_inside(
-        connection, worker_workflows, queue_message, workflow_instance_func, *args, **kwargs
+        connection, worker_workflows, queue_message, workflow_instance_func, meta_worker, *args, **kwargs
     ):
-    process_message_start_time = time()
     if queue_message is None:
         return
+    process_message_start_time = time()
+    worker_id = WORKER_ID_UNKNOWN
     try:
         workflow_instance_data = get_job_data(queue_message)
-        meta_worker = workflow_instance_data['workflow_instance']['meta_worker']
         worker_id = workflow_instance_data['workflow_instance']['worker_id']
         move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id)
         start_time = get_workflow_instance_key(
@@ -71,8 +74,7 @@ def default_main_inside(
             )
         last_job_id = workflow_instance_data['jobs_ids'][-1]
         worker_workflow_data = get_worker_workflow_data(
-            worker_workflows, workflow_instance_data,
-            workflow_instance_data['workflow_instance']['worker_id']
+            worker_workflows, workflow_instance_data, worker_id
         )
         nodata = True
         for worker_output_data in workflow_instance_func(
@@ -105,13 +107,11 @@ def default_main_inside(
         )
         mark_worker_id_as_finalized(connection, worker_id, queue_message)
     except Exception, e:
-        worker_id = 'unknown'
-        try:
-            worker_id = workflow_instance_data['workflow_instance']['worker_id']
-        except Exception, e:
-            pass
         write_error_job(connection, worker_id, queue_message, e)
-    # TODO: Manage if worker fails and message is lost
+        if worker_id == WORKER_ID_UNKNOWN:
+            undo_mark_meta_worker_as_processed(connection, meta_worker)
+        else:
+            mark_worker_id_as_finalized(connection, worker_id, queue_message)
 
 # You can execute this: python -m poliglo.runner file.py
 # file.py must have a function called 'process'

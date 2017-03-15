@@ -6,7 +6,7 @@ import traceback
 
 from poliglo.variables import REDIS_KEY_INSTANCE_WORKER_JOBS, REDIS_KEY_QUEUE, \
     REDIS_KEY_INSTANCE_WORKER_FINALIZED_JOBS, REDIS_KEY_QUEUE_FINALIZED, \
-    REDIS_KEY_INSTANCE_WORKER_ERRORS, REDIS_KEY_QUEUE_PROCESSING
+    REDIS_KEY_INSTANCE_WORKER_ERRORS
 from poliglo.utils import to_json, json_loads, convert_object_to_unicode
 from poliglo.status import update_workflow_instance
 

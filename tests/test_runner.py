@@ -64,6 +64,31 @@ class TestDefaultMainInside(TestCase):
         workflow_instance_data = write_outputs_mock.call_args[0][2]
         self.assertEqual({}, workflow_instance_data)
 
+    @mock.patch('poliglo.runner.write_error_job')
+    @mock.patch('poliglo.runner.get_job_data', mock.Mock(side_effect=Exception()))
+    @mock.patch('poliglo.runner.write_outputs')
+    def test_fails_at_parse_queue_message(self, write_outputs_mock, write_error_mock):
+        def my_func(_, workflow_instance_data):
+            return [
+                None,
+            ]
+        poliglo.runner.default_main_inside_wrapper(
+            self.connection, self.worker_workflows, self.meta_worker, my_func
+        )
+        write_outputs_mock.assert_not_called()
+        self.assertEqual('unknown', write_error_mock.call_args[0][1])
+
+    @mock.patch('poliglo.runner.write_error_job')
+    @mock.patch('poliglo.runner.write_outputs')
+    def test_fails_at_process_function(self, write_outputs_mock, write_error_mock):
+        def my_func(_, workflow_instance_data):
+            raise Exception('Error')
+        poliglo.runner.default_main_inside_wrapper(
+            self.connection, self.worker_workflows, self.meta_worker, my_func
+        )
+        write_outputs_mock.assert_not_called()
+        self.assertEqual('worker_1', write_error_mock.call_args[0][1])
+
     @mock.patch('poliglo.runner.write_finalized_job')
     def test_with_no_data_returned(self, write_finalized_job):
         def my_func(_, workflow_instance_data):
