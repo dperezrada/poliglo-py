@@ -94,14 +94,18 @@ def write_finalized_job(workflow_instance_data, worker_output_data, worker_id, c
         })
     )
 
-def write_error_job(connection, worker_id, raw_data, error):
+def write_error_job(connection, worker_id, raw_data, error, frame=None):
     metric_name = 'errors'
     try:
         workflow_instance_data = json_loads(raw_data)
         if not workflow_instance_data.get('workers_error'):
             workflow_instance_data['workers_error'] = {}
+        if frame is None:
+            full_trace = traceback.format_exc()
+        else:
+            full_trace = traceback.format_stack(frame)
         workflow_instance_data['workers_error'][worker_id] = {
-            'error': str(error), 'traceback': traceback.format_exc()
+            'error': str(error), 'traceback': ''.join(full_trace)
         }
         metric_name = REDIS_KEY_INSTANCE_WORKER_ERRORS % (
             workflow_instance_data['workflow_instance']['workflow'],

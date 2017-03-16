@@ -59,6 +59,3 @@ def move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id):
 
 def mark_worker_id_as_finalized(connection, meta_worker, raw_data):
     return connection.lrem(var.REDIS_KEY_QUEUE_PROCESSING % meta_worker, -1, raw_data)
-
-def mark_worker_id_as_zombie(connection, worker_id):
-    return connection.rpoplpush(var.REDIS_KEY_QUEUE % worker_id, var.REDIS_KEY_QUEUE_ZOMBIE % worker_id)
