@@ -9,7 +9,7 @@ from time import time
 from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs, \
-    mark_meta_worker_as_processed, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue, \
+    get_queue_message, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue, \
     undo_mark_meta_worker_as_processed
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
 
@@ -47,8 +47,7 @@ def default_main(master_mind_url, meta_worker, workflow_instance_func, *args, **
 def default_main_inside_wrapper(
         connection, worker_workflows, meta_worker, workflow_instance_func, *args, **kwargs
     ):
-    queue_message = mark_meta_worker_as_processed(connection, meta_worker)
-    set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, queue_message)
+    queue_message = get_queue_message(connection, meta_worker)
     default_main_inside(
         connection, worker_workflows, queue_message, workflow_instance_func, meta_worker, *args, **kwargs
     )
@@ -58,6 +57,7 @@ def default_main_inside(
     ):
     if queue_message is None:
         return
+    set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, queue_message)
     process_message_start_time = time()
     worker_id = WORKER_ID_UNKNOWN
     try:
@@ -115,6 +115,7 @@ def default_main_inside(
         mark_worker_id_as_finalized(connection, worker_id, queue_message)
     except Exception, e:
         log_error_and_cleanup_queues(connection, meta_worker, worker_id, queue_message, e)
+    set_default_signal_handler()
 
 def log_error_and_cleanup_queues(connection, meta_worker, worker_id, queue_message, exception=None, frame=None):
     """If exception is None, this indicates that was called in a signal handler"""
@@ -135,6 +136,10 @@ def set_signal_handler(handler, *args, **kwargs):
         sys.exit(0)
     signal.signal(signal.SIGTERM, my_handler)
     signal.signal(signal.SIGINT, my_handler)
+
+def set_default_signal_handler():
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 # You can execute this: python -m poliglo.runner file.py
 # file.py must have a function called 'process'

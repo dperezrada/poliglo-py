@@ -103,9 +103,9 @@ def write_error_job(connection, worker_id, raw_data, error, frame=None):
         if frame is None:
             full_trace = traceback.format_exc()
         else:
-            full_trace = traceback.format_stack(frame)
+            full_trace = ''.join(traceback.format_stack(frame))
         workflow_instance_data['workers_error'][worker_id] = {
-            'error': str(error), 'traceback': ''.join(full_trace)
+            'error': str(error), 'traceback': full_trace
         }
         metric_name = REDIS_KEY_INSTANCE_WORKER_ERRORS % (
             workflow_instance_data['workflow_instance']['workflow'],

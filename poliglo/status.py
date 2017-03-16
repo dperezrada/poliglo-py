@@ -48,7 +48,7 @@ def workflow_instance_exists(connection, workflow, workflow_instance_id):
 def stats_add_new_instance(connection, workflow, workflow_instance_info):
     connection.zadd(var.REDIS_KEY_INSTANCES % workflow, time(), to_json(workflow_instance_info))
 
-def mark_meta_worker_as_processed(connection, meta_worker, timeout=0):
+def get_queue_message(connection, meta_worker, timeout=0):
     return connection.brpoplpush(var.REDIS_KEY_QUEUE % meta_worker, var.REDIS_KEY_QUEUE_PROCESSING % meta_worker, timeout)
 
 def undo_mark_meta_worker_as_processed(connection, meta_worker, timeout=0):
