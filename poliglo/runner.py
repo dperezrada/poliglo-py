@@ -14,6 +14,8 @@ from poliglo.status import get_workflow_instance_key, update_workflow_instance_k
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
 
 WORKER_ID_UNKNOWN = 'unknown'
+# When the worker read this from the queue, the worker will exit gracefully
+POISON_PILL = 'poison_pill'
 
 class InterruptedException(Exception):
     """Used when a worker is terminated via signals."""
@@ -57,6 +59,10 @@ def default_main_inside(
     ):
     if queue_message is None:
         return
+    elif queue_message == POISON_PILL:
+        print "%s: Exited gracefully" % meta_worker
+        mark_worker_id_as_finalized(connection, meta_worker, queue_message)
+        sys.exit(0)
     set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, queue_message)
     process_message_start_time = time()
     worker_id = WORKER_ID_UNKNOWN
