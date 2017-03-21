@@ -10,7 +10,7 @@ from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_co
 from poliglo.inputs import get_job_data
 from poliglo.status import get_workflow_instance_key, update_workflow_instance_key, update_done_jobs, \
     get_queue_message, mark_worker_id_as_finalized, move_meta_worker_to_worker_id_queue, \
-    undo_mark_meta_worker_as_processed
+    undo_mark_meta_worker_as_processed, mark_meta_worker_as_finalized
 from poliglo.outputs import write_finalized_job, write_outputs, write_error_job
 
 WORKER_ID_UNKNOWN = 'unknown'
@@ -61,16 +61,18 @@ def default_main_inside(
         return
     elif queue_message == POISON_PILL:
         print "%s: Exited gracefully" % meta_worker
-        mark_worker_id_as_finalized(connection, meta_worker, queue_message)
+        mark_meta_worker_as_finalized(connection, meta_worker, queue_message)
         sys.exit(0)
-    set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, queue_message)
+    set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, WORKER_ID_UNKNOWN, None, queue_message)
     process_message_start_time = time()
     worker_id = WORKER_ID_UNKNOWN
+    workflow_instance_id = None
     try:
         workflow_instance_data = get_job_data(queue_message)
         worker_id = workflow_instance_data['workflow_instance']['worker_id']
-        move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id)
-        set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, worker_id, queue_message)
+        workflow_instance_id = workflow_instance_data['workflow_instance']['id']
+        move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id, workflow_instance_id)
+        set_signal_handler(log_error_and_cleanup_queues, connection, meta_worker, worker_id, workflow_instance_id, queue_message)
         start_time = get_workflow_instance_key(
             connection,
             workflow_instance_data['workflow_instance']['workflow'],
@@ -118,12 +120,13 @@ def default_main_inside(
             workflow_instance_data['workflow_instance']['id'], worker_id,
             last_job_id, process_message_start_time
         )
-        mark_worker_id_as_finalized(connection, worker_id, queue_message)
+        mark_worker_id_as_finalized(connection, worker_id, workflow_instance_id, queue_message)
     except Exception, e:
-        log_error_and_cleanup_queues(connection, meta_worker, worker_id, queue_message, e)
+        log_error_and_cleanup_queues(connection, meta_worker, worker_id, workflow_instance_id, queue_message, e)
     set_default_signal_handler()
 
-def log_error_and_cleanup_queues(connection, meta_worker, worker_id, queue_message, exception=None, frame=None):
+def log_error_and_cleanup_queues(connection, meta_worker, worker_id, workflow_instance_id,
+                                 queue_message, exception=None, frame=None):
     """If exception is None, this indicates that was called in a signal handler"""
     if exception is None:
         exception = InterruptedException('Worker was stopped via signal')
@@ -131,7 +134,7 @@ def log_error_and_cleanup_queues(connection, meta_worker, worker_id, queue_messa
     if worker_id == WORKER_ID_UNKNOWN:
         undo_mark_meta_worker_as_processed(connection, meta_worker)
     else:
-        mark_worker_id_as_finalized(connection, worker_id, queue_message)
+        mark_worker_id_as_finalized(connection, worker_id, workflow_instance_id, queue_message)
 
 def set_signal_handler(handler, *args, **kwargs):
     """Handle program termination via signals."""

@@ -54,8 +54,14 @@ def get_queue_message(connection, meta_worker, timeout=0):
 def undo_mark_meta_worker_as_processed(connection, meta_worker, timeout=0):
     return connection.brpoplpush(var.REDIS_KEY_QUEUE_PROCESSING % meta_worker, var.REDIS_KEY_QUEUE % meta_worker, timeout)
 
-def move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id):
-    return connection.brpoplpush(var.REDIS_KEY_QUEUE_PROCESSING % meta_worker, var.REDIS_KEY_QUEUE_PROCESSING % worker_id)
+def move_meta_worker_to_worker_id_queue(connection, meta_worker, worker_id, worker_instance_id):
+    return connection.brpoplpush(
+        var.REDIS_KEY_QUEUE_PROCESSING % meta_worker,
+        var.REDIS_KEY_QUEUE_PROCESSING_WORKER % (worker_id, worker_instance_id)
+    )
 
-def mark_worker_id_as_finalized(connection, meta_worker, raw_data):
+def mark_meta_worker_as_finalized(connection, meta_worker, raw_data):
     return connection.lrem(var.REDIS_KEY_QUEUE_PROCESSING % meta_worker, -1, raw_data)
+
+def mark_worker_id_as_finalized(connection, worker_id, worker_instance_id, raw_data):
+    return connection.lrem(var.REDIS_KEY_QUEUE_PROCESSING_WORKER % (worker_id, worker_instance_id), -1, raw_data)
