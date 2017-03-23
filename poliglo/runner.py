@@ -4,7 +4,7 @@ import imp
 import signal
 from os import environ
 from os.path import dirname, basename, splitext
-from time import time
+from time import time, sleep
 
 from poliglo.preparation import prepare_worker, get_worker_workflow_data, get_config, get_connection
 from poliglo.inputs import get_job_data
@@ -60,6 +60,10 @@ def default_main_inside(
     if queue_message is None:
         return
     elif queue_message == POISON_PILL:
+        # If the worker exits too quickly after starting, supervisor will try to restart it,
+        # even though it exited with status 0. So first we'll wait 'startsecs' seconds
+        # See http://supervisord.org/configuration.html#program-x-section-values (starsecs)
+        sleep(1)
         print "%s: Exited gracefully" % meta_worker
         mark_meta_worker_as_finalized(connection, meta_worker, queue_message)
         sys.exit(0)
